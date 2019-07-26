@@ -1,7 +1,8 @@
 const CONSTANTS = {
   SHEET_NAMES: {
     BoardingSchedule: "Boarding Schedule",
-    AllCatsInStore: "_private_all_cats_at_store"
+    AllCatsInStore: "_private_all_cats_at_store",
+    FeedingLogs: "Feeding Logs"
   }
 };
 
@@ -23,7 +24,7 @@ type CatSchema = {
   hereUntil: string;
 };
 
-function getFoodOrderForm() {
+function generateDistributionForm() {
   Logger.log("starting");
   var form = FormApp.openByUrl(
     "https://docs.google.com/forms/d/1GG1NsHHXGsgI1sAXxJyXW9hZ-ZCGgYBx1bdcBSAPmqs/edit"
@@ -79,7 +80,55 @@ function getFoodOrderForm() {
   Logger.log(form.getPublishedUrl());
 }
 
-function testMakeChart() {}
+function generateRecordingForm() {
+  var form = FormApp.openByUrl(
+    "https://docs.google.com/forms/d/1ZXh5fvWS-kpAzAJAGDOIaHMR6WksKolkeYaya7QcyLU/edit"
+  );
+  form.deleteAllResponses();
+  form.getItems().forEach(item => form.deleteItem(item));
+  form.setTitle("Food Recording Form");
+
+  // form
+  //   .addTextItem()
+  //   .setTitle("Chef for 7/20/2019 AM")
+  //   .setRequired(true);
+
+  Logger.log("form opened");
+
+  function createMCQuestionForFood(
+    catName: string,
+    foodName: string,
+    prettyDate: string
+  ) {
+    const item = form.addMultipleChoiceItem();
+    item.setTitle(
+      `Did '${catName}' eat all of the '${foodName}' on ${prettyDate}?`
+    );
+    item.setChoices([
+      item.createChoice("Yes"),
+      item.createChoice("Half"),
+      item.createChoice("No")
+    ]);
+    item.setRequired(true);
+  }
+
+  getAllFeedingsWithQuestionMark().forEach(data => {
+    const prettyDate =
+      data.date.getMonth() +
+      1 +
+      "/" +
+      data.date.getDate() +
+      "/" +
+      data.date.getFullYear() +
+      " " +
+      data.amPM;
+    form.addPageBreakItem().setTitle(`${data.catName}`);
+
+    data.foods.forEach(({ name }) => {
+      createMCQuestionForFood(data.catName, name, prettyDate);
+    });
+  });
+}
 
 /////////////////////////////////////////////////////////////
 function getAllCatsInStore() {
@@ -89,6 +138,69 @@ function getAllCatsInStore() {
   return getTableDataFromSheetAsArrOfObj<CatSchema>(sheet).filter(({ name }) =>
     Boolean(name)
   );
+}
+
+function getAllFeedingsWithQuestionMark() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
+    CONSTANTS.SHEET_NAMES.FeedingLogs
+  );
+
+  const data: {
+    timestamp: string;
+    date: Date;
+    amPM: string;
+    catName: string;
+    status: string;
+    foods: { name: string; status: string }[];
+  }[] = sheet
+    .getRange("E3:E")
+    .getValues()
+    .map((row, i) => ({ i, value: row[0] }))
+    .filter(({ value }) => value === "?")
+    .map(({ i }) => i + 3)
+    .map(index => {
+      const [
+        timestamp,
+        date,
+        amPM,
+        catName,
+        status,
+        food1,
+        food1Status,
+        food2,
+        food2Status,
+        food3,
+        food3Status,
+        food4,
+        food4Status
+      ] = sheet.getRange(index, 1, 1, 13).getValues()[0];
+
+      const foods = [];
+
+      if (food1Status === "?") {
+        foods.push({ name: food1, status: food1Status });
+        if (food2Status === "?") {
+          foods.push({ name: food2, status: food2Status });
+          if (food3Status === "?") {
+            foods.push({ name: food3, status: food3Status });
+            if (food4Status === "?") {
+              foods.push({ name: food4, status: food4Status });
+            }
+          }
+        }
+      }
+
+      return {
+        timestamp,
+        date,
+        amPM,
+        catName,
+        status,
+        foods
+      };
+    });
+
+  return data;
 }
 
 function getTableDataFromSheetAsArrOfObj<T extends {}>(
