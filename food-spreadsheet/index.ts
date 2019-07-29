@@ -1,9 +1,9 @@
-const CONSTANTS = {
+const CONSTANTS_OLD = {
   SHEET_NAMES: {
     BoardingSchedule: "Boarding Schedule",
     AllCatsInStore: "_private_all_cats_at_store",
-    FeedingLogs: "Feeding Logs"
-  }
+    FeedingLogs: "Feeding Logs",
+  },
 };
 
 type BoardingScheduleSchema = {
@@ -57,8 +57,8 @@ function generateDistributionForm() {
           favoriteFoods: {
             "Food A": { yes: 10, no: 2 },
             "Food B": { yes: 8, no: 3 },
-            "Food C": { yes: 5, no: 4 }
-          }
+            "Food C": { yes: 5, no: 4 },
+          },
         };
       }
     )
@@ -101,13 +101,11 @@ function generateRecordingForm() {
     prettyDate: string
   ) {
     const item = form.addMultipleChoiceItem();
-    item.setTitle(
-      `Did '${catName}' eat all of the '${foodName}' on ${prettyDate}?`
-    );
+    item.setTitle(`Did '${catName}' eat all of the '${foodName}' on ${prettyDate}?`);
     item.setChoices([
       item.createChoice("Yes"),
       item.createChoice("Half"),
-      item.createChoice("No")
+      item.createChoice("No"),
     ]);
     item.setRequired(true);
   }
@@ -131,129 +129,122 @@ function generateRecordingForm() {
 }
 
 /////////////////////////////////////////////////////////////
-function getAllCatsInStore() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
-    CONSTANTS.SHEET_NAMES.AllCatsInStore
-  );
-  return getTableDataFromSheetAsArrOfObj<CatSchema>(sheet).filter(({ name }) =>
-    Boolean(name)
-  );
-}
+// function getAllCatsInStore() {
+//   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
+//     CONSTANTS.SHEET_NAMES.AllCatsInStore
+//   );
+//   return getTableDataFromSheetAsArrOfObj<CatSchema>(sheet).filter(({ name }) =>
+//     Boolean(name)
+//   );
+// }
 
-function getAllFeedingsWithQuestionMark() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
-    CONSTANTS.SHEET_NAMES.FeedingLogs
-  );
+// function getAllFeedingsWithQuestionMark() {
+//   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
+//     CONSTANTS.SHEET_NAMES.FeedingLogs
+//   );
 
-  const data: {
-    timestamp: string;
-    date: Date;
-    amPM: string;
-    catName: string;
-    status: string;
-    foods: { name: string; status: string }[];
-  }[] = sheet
-    .getRange("E3:E")
-    .getValues()
-    .map((row, i) => ({ i, value: row[0] }))
-    .filter(({ value }) => value === "?")
-    .map(({ i }) => i + 3)
-    .map(index => {
-      const [
-        timestamp,
-        date,
-        amPM,
-        catName,
-        status,
-        food1,
-        food1Status,
-        food2,
-        food2Status,
-        food3,
-        food3Status,
-        food4,
-        food4Status
-      ] = sheet.getRange(index, 1, 1, 13).getValues()[0];
+//   const data: {
+//     timestamp: string;
+//     date: Date;
+//     amPM: string;
+//     catName: string;
+//     status: string;
+//     foods: { name: string; status: string }[];
+//   }[] = sheet
+//     .getRange("E3:E")
+//     .getValues()
+//     .map((row, i) => ({ i, value: row[0] }))
+//     .filter(({ value }) => value === "?")
+//     .map(({ i }) => i + 3)
+//     .map(index => {
+//       const [
+//         timestamp,
+//         date,
+//         amPM,
+//         catName,
+//         status,
+//         food1,
+//         food1Status,
+//         food2,
+//         food2Status,
+//         food3,
+//         food3Status,
+//         food4,
+//         food4Status,
+//       ] = sheet.getRange(index, 1, 1, 13).getValues()[0];
 
-      const foods = [];
+//       const foods = [];
 
-      if (food1Status === "?") {
-        foods.push({ name: food1, status: food1Status });
-        if (food2Status === "?") {
-          foods.push({ name: food2, status: food2Status });
-          if (food3Status === "?") {
-            foods.push({ name: food3, status: food3Status });
-            if (food4Status === "?") {
-              foods.push({ name: food4, status: food4Status });
-            }
-          }
-        }
-      }
+//       if (food1Status === "?") {
+//         foods.push({ name: food1, status: food1Status });
+//         if (food2Status === "?") {
+//           foods.push({ name: food2, status: food2Status });
+//           if (food3Status === "?") {
+//             foods.push({ name: food3, status: food3Status });
+//             if (food4Status === "?") {
+//               foods.push({ name: food4, status: food4Status });
+//             }
+//           }
+//         }
+//       }
 
-      return {
-        timestamp,
-        date,
-        amPM,
-        catName,
-        status,
-        foods
-      };
-    });
+//       return {
+//         timestamp,
+//         date,
+//         amPM,
+//         catName,
+//         status,
+//         foods,
+//       };
+//     });
 
-  return data;
-}
+//   return data;
+// }
 
-function getTableDataFromSheetAsArrOfObj<T extends {}>(
-  sheet: GoogleAppsScript.Spreadsheet.Sheet
-): T[] {
-  const [headers, ...data] = sheet.getDataRange().getValues();
-  return data.map(row =>
-    headers.reduce((o, header, i) => ({ ...o, [header]: row[i] }))
-  );
-}
+// function getTableDataFromSheetAsArrOfObj<T extends {}>(
+//   sheet: GoogleAppsScript.Spreadsheet.Sheet
+// ): T[] {
+//   const [headers, ...data] = sheet.getDataRange().getValues();
+//   return data.map(row => headers.reduce((o, header, i) => ({ ...o, [header]: row[i] })));
+// }
 
-type FoodHistoryData = {
-  [foodName: string]: { yes: number; no: number };
-};
+// type FoodHistoryData = {
+//   [foodName: string]: { yes: number; no: number };
+// };
 
-function makeYesNoBarGraph(
-  data: FoodHistoryData
-): GoogleAppsScript.Charts.Chart {
-  const maxTotalFeedings = Object.keys(data).reduce(
-    (max: number, foodName: string) => {
-      const thisRow = data[foodName];
-      return Math.max(
-        max,
-        Object.keys(thisRow)
-          .map(k => thisRow[k])
-          .reduce((a, b) => a + b, 0)
-      );
-    },
-    0
-  );
-  let dataTableBuilder = Charts.newDataTable()
-    .addColumn(Charts.ColumnType.STRING, "Month")
-    .addColumn(Charts.ColumnType.NUMBER, "Yes")
-    // .addColumn(Charts.ColumnType.NUMBER, 'Half')
-    .addColumn(Charts.ColumnType.NUMBER, "No");
+// function makeYesNoBarGraph(data: FoodHistoryData): GoogleAppsScript.Charts.Chart {
+//   const maxTotalFeedings = Object.keys(data).reduce((max: number, foodName: string) => {
+//     const thisRow = data[foodName];
+//     return Math.max(
+//       max,
+//       Object.keys(thisRow)
+//         .map(k => thisRow[k])
+//         .reduce((a, b) => a + b, 0)
+//     );
+//   }, 0);
+//   let dataTableBuilder = Charts.newDataTable()
+//     .addColumn(Charts.ColumnType.STRING, "Month")
+//     .addColumn(Charts.ColumnType.NUMBER, "Yes")
+//     // .addColumn(Charts.ColumnType.NUMBER, 'Half')
+//     .addColumn(Charts.ColumnType.NUMBER, "No");
 
-  Object.keys(data).forEach(foodName => {
-    dataTableBuilder = dataTableBuilder.addRow([
-      foodName,
-      data[foodName].yes,
-      data[foodName].no
-    ]);
-  });
+//   Object.keys(data).forEach(foodName => {
+//     dataTableBuilder = dataTableBuilder.addRow([
+//       foodName,
+//       data[foodName].yes,
+//       data[foodName].no,
+//     ]);
+//   });
 
-  const chart = Charts.newBarChart()
-    .setDataTable(dataTableBuilder as GoogleAppsScript.Charts.DataTableBuilder)
-    .setStacked()
-    .setRange(0, maxTotalFeedings)
-    .setColors(["green", "red"])
-    .build();
+//   const chart = Charts.newBarChart()
+//     .setDataTable(dataTableBuilder as GoogleAppsScript.Charts.DataTableBuilder)
+//     .setStacked()
+//     .setRange(0, maxTotalFeedings)
+//     .setColors(["green", "red"])
+//     .build();
 
-  // const imageData = Utilities.base64Encode(chart.getAs('image/png').getBytes());
-  // const imageUrl = 'data:image/png;base64,' + encodeURI(imageData);
-  // Logger.log(imageUrl);
-  return chart;
-}
+//   // const imageData = Utilities.base64Encode(chart.getAs('image/png').getBytes());
+//   // const imageUrl = 'data:image/png;base64,' + encodeURI(imageData);
+//   // Logger.log(imageUrl);
+//   return chart;
+// }
