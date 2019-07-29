@@ -1,3 +1,14 @@
+let LOG_COUNT = 1;
+function addLogToLogSheet(obj: any, note?: string) {
+  const sheet = SpreadsheetApp.openById(FOOD_DASHBOARD_SPREADSHEET_ID).getSheetByName(
+    "Logs"
+  );
+  const THIS_LOG_NO = LOG_COUNT++;
+  sheet.getRange(THIS_LOG_NO, 1).setValue(JSON.stringify(obj, null, 4));
+  if (note) {
+    sheet.getRange(THIS_LOG_NO, 2).setValue(note);
+  }
+}
 // https://tc39.github.io/ecma262/#sec-array.prototype.find
 if (!Array.prototype.find) {
   Object.defineProperty(Array.prototype, "find", {
@@ -47,7 +58,7 @@ if (!Array.prototype.find) {
 // ====================== CONSTANTS ===================== //
 const FOOD_DASHBOARD_SPREADSHEET_ID = "1gQNMd06hj6Lsh1OPWKC1L0wgc12aqiNroR97XV-D2cI";
 const PLATING_FORM_URL =
-  "https://docs.google.com/forms/d/1GG1NsHHXGsgI1sAXxJyXW9hZ-ZCGgYBx1bdcBSAPmqs/edit";
+  "https://docs.google.com/forms/d/1AKtI-Ey5P1QkrMjNy-nQaT-9w-WA6CE8VtoUsHAhMtI/edit";
 const OLD_RECORDING_FORM =
   "https://docs.google.com/forms/d/1ZXh5fvWS-kpAzAJAGDOIaHMR6WksKolkeYaya7QcyLU/edit";
 const RECORDING_FORM_URL = PLATING_FORM_URL;
@@ -56,6 +67,10 @@ const CONSTANTS = {
     BoardingSchedule: "Boarding Schedule",
     AllCatsInStore: "_private_all_cats_at_store",
     FeedingLogs: "Feeding Logs",
+  },
+  TITLES: {
+    PlatingForm: "Food Plating Form",
+    RecordingForm: "Food Recording Form",
   },
 };
 const FOOD_RECORD_OPTIONS = ["Yes", "Half", "No"];
@@ -95,7 +110,7 @@ function setupPlatingForm() {
         otherNotes?: string;
         favoriteFoods?: FoodHistoryData;
       } => {
-        Logger.log(`processing: ${cat.name}`);
+        addLogToLogSheet(`processing: ${cat.name}`);
         return {
           name: cat.name,
           dietRestrictions: "TODO DIET RESTRICTION",
@@ -121,7 +136,9 @@ function setupPlatingForm() {
 }
 
 function setupRecordingForm() {
-  const form = clearAndOpenForm(RECORDING_FORM_URL, { title: "Food Recording Form" });
+  const form = clearAndOpenForm(RECORDING_FORM_URL, {
+    title: CONSTANTS.TITLES.RecordingForm,
+  });
 
   function createMCQuestionForFood(
     catName: string,
@@ -144,12 +161,19 @@ function setupRecordingForm() {
   });
 }
 // ============================ Triggers ======================== //
-function onPlatingFormSubmit(event) {
+function onFormSubmit(event) {
   const responses: IResponse[] = event.response.getItemResponses().map(itemResponse => ({
     question: itemResponse.getItem().getTitle(),
     answer: itemResponse.getResponse(),
   }));
-
+  const title = FormApp.openByUrl(RECORDING_FORM_URL).getTitle();
+  if (title === CONSTANTS.TITLES.PlatingForm) {
+    onPlatingFormSubmit(responses);
+  } else if (title === CONSTANTS.TITLES.RecordingForm) {
+    onRecordingFormSubmit(responses);
+  }
+}
+function onPlatingFormSubmit(responses: IResponse[]) {
   const { date, amPM, chef } = getDateAndChef(responses);
   const timestamp = Date.now();
   const feedingData = responses.reduce(
@@ -179,30 +203,52 @@ function onPlatingFormSubmit(event) {
   });
 }
 
-function onRecordingFormSubmit(event) {
+function testOnRecordingFormSubmit() {
+  const o = {
+    question: `Did 'Foo' eat all of the 'foo fooo' on 7/20/2019 AM?`,
+    answer: "Yes",
+  };
+  const arr = [o];
+  addLogToLogSheet(o, "o");
+  addLogToLogSheet(arr, "arr");
+  onRecordingFormSubmit(arr);
+}
+
+function onRecordingFormSubmit(responses: IResponse[]) {
+  addLogToLogSheet(responses, "responses");
   const rawData: {
     prettyDate: string;
     catName: string;
     foodName: string;
     response: FoodRecordOptions;
-  }[] = event.response
-    .getItemResponses()
-    .map(itemResponse => ({
-      question: itemResponse.getItem().getTitle(),
-      answer: itemResponse.getResponse(),
-    }))
+  }[] = responses
     .map(({ question, answer }) => {
-      const { foodName, catName, prettyDate }: FoodInfo = convertQuestionIntoFoodInfo(
-        question
+      const result: FoodInfo | null = convertQuestionIntoFoodInfo(question);
+      addLogToLogSheet(
+        `question: ${JSON.stringify(question, null, 4)}; answer: ${JSON.stringify(
+          answer,
+          null,
+          4
+        )}`
       );
-
+      addLogToLogSheet(result, "result");
+      if (result === null) {
+        return null;
+      }
+      const { prettyDate, catName, foodName } = result;
       return { prettyDate, catName, foodName, response: answer as FoodRecordOptions };
-    });
-
+    })
+    .filter(Boolean);
+  addLogToLogSheet(rawData, "rawData");
   const tempTransformedData = rawData.reduce((all, item) => {
     const key = `${item.prettyDate}|${item.catName}`;
-    return { ...all, [key]: { ...all[key], [item.foodName]: item.response } };
+    return {
+      ...all,
+      [key]: { ...all[key], [item.foodName]: FOOD_RECORD_MAP[item.response] },
+    };
   }, {});
+
+  addLogToLogSheet(tempTransformedData, "tempTransformedData");
 
   const data = Object.keys(tempTransformedData).map(prettyDateAndCatName => {
     const [prettyDate, catName] = prettyDateAndCatName.split("|");
@@ -217,6 +263,8 @@ function onRecordingFormSubmit(event) {
     };
   });
 
+  addLogToLogSheet(tempTransformedData, "tempTransformedData");
+
   const sheet = SpreadsheetApp.openById(FOOD_DASHBOARD_SPREADSHEET_ID).getSheetByName(
     CONSTANTS.SHEET_NAMES.FeedingLogs
   );
@@ -226,15 +274,18 @@ function onRecordingFormSubmit(event) {
       .getRange("B3:D")
       .getValues()
       .map((row, i) => ({ i, date: row[0], amPM: row[1], catName: row[2] }))
-      .filter(
-        ({ date, amPM, catName }) =>
+      .filter(({ date, amPM, catName }) => {
+        const result =
           item.date.toString() === date.toString() &&
           item.amPM === amPM &&
-          item.catName === catName
-      )
+          item.catName === catName;
+        return result;
+      })
       .map(({ i }) => i + 3)
       .forEach(i => {
+        addLogToLogSheet(i, "i");
         const existingData = getRowOfFeedingLog(sheet, i);
+        addLogToLogSheet(existingData, `existing data for ${i}`);
         Object.keys(item.results).forEach(result => {
           const newStatus = item.results[result];
           switch (result) {
@@ -252,7 +303,7 @@ function onRecordingFormSubmit(event) {
               break;
           }
         });
-        writeFeedingLogRowOfData(sheet, i, existingData);
+        writeFeedingLogRowOfData(sheet, i, { ...existingData });
       });
   });
 }
@@ -333,7 +384,7 @@ function getRowOfFeedingLog(
     date,
     amPM,
     catName,
-    status,
+    _,
     food1,
     food1Status,
     food2,
@@ -343,6 +394,8 @@ function getRowOfFeedingLog(
     food4,
     food4Status,
   ] = sheet.getRange(index, 1, 1, 13).getValues()[0];
+
+  const status = sheet.getRange(index, 5).getFormula();
   return {
     timestamp,
     date,
@@ -526,14 +579,14 @@ function makeYesNoBarGraph(data: FoodHistoryData): GoogleAppsScript.Charts.Chart
 }
 type FoodInfo = { foodName: string; catName: string; prettyDate: string };
 function convertQuestionIntoFoodInfo(question: string): FoodInfo | null {
-  const match = /Did '(.*)' eat all of the '(.*)' on (\d\d?\s*\/\s*\d\d?\s*\/\s*\d\d\d\d\s+[AM|PM])\?/.exec(
+  const match = /Did '(.*)' eat all of the '(.*)' on (\d\d?\s*\/\s*\d\d?\s*\/\s*\d\d\d\d\s+(AM|PM))\?/.exec(
     question
   );
   // const match = question.match(questionRegex);
   if (!match) {
     return null;
   }
-  const [ignore, foodName, catName, prettyDate] = match;
+  const [ignore, catName, foodName, prettyDate] = match;
   return { foodName, catName, prettyDate };
 }
 function convertFoodInfoIntoQuestion({
@@ -575,9 +628,9 @@ function testFormOnSubmit() {
 }
 
 // function onFormSubmit(event: GoogleAppsScript.Events.FormsOnSubmit) {
-//   Logger.log(event);
+//   addLogToLogSheet(event);
 //   const { namedValues } = event;
-//   Logger.log(namedValues);
+//   addLogToLogSheet(namedValues);
 //   const dateRegex = /(\d\d?\s*\/\s*\d\d?\s*\/\s*\d\d\d\d)\s+(AM|PM)/;
 //   const dateKey = Object.keys(namedValues).find(key => key.match(dateRegex));
 //   const match = dateKey.match(dateRegex);
@@ -608,7 +661,7 @@ function testFormOnSubmit() {
 //     FEEDING_LOGS_SHEET_NAME,
 //   );
 //   // ).getSheetByName(FEEDING_LOGS_SHEET_NAME);
-//   Logger.log(JSON.stringify(foodDistributionData));
+//   addLogToLogSheet(JSON.stringify(foodDistributionData));
 
 //   function getQuestionMarkOrDash(food: string | undefined) {
 //     return food ? '?' : '-';
