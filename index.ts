@@ -401,6 +401,58 @@ function getFeedingRowData(data: {
     getQuestionMarkOrDash(data.food4)
   ];
 }
+function testGetFoodStatsPerCat() {
+  const foodStatsPerCat = getFoodStatsPerCat();
+  addLogToLogSheet(foodStatsPerCat, "foodStatsPerCat");
+}
+function getFoodStatsPerCat() {
+  const data = getAllFeedingLogData();
+
+  function addFoodToCatInfo(
+    catInfo: object,
+    foodName?: string,
+    foodStatus?: string
+  ) {
+    if (!foodStatus || foodStatus == "--" || foodStatus == "-") {
+      return catInfo;
+    }
+
+    const thisFoodsInfo = catInfo[foodName] || { yes: 0, no: 0, half: 0 };
+
+    if (foodStatus === "Y") {
+      thisFoodsInfo.yes++;
+    } else if (foodStatus === "N") {
+      thisFoodsInfo.no++;
+    } else if (foodStatus === "H") {
+      thisFoodsInfo.half++;
+    }
+
+    return { ...catInfo, [foodName]: thisFoodsInfo };
+  }
+
+  return data.reduce((all, row) => {
+    let catInfo = all[row.catName] || {};
+    let updatedCatInfo = addFoodToCatInfo(catInfo, row.food1, row.food1Status);
+    updatedCatInfo = addFoodToCatInfo(
+      updatedCatInfo,
+      row.food2,
+      row.food2Status
+    );
+    updatedCatInfo = addFoodToCatInfo(
+      updatedCatInfo,
+      row.food3,
+      row.food3Status
+    );
+    updatedCatInfo = addFoodToCatInfo(
+      updatedCatInfo,
+      row.food4,
+      row.food4Status
+    );
+
+    return { ...all, [row.catName]: updatedCatInfo };
+  }, {});
+}
+
 // ====================== RECORDING ===================== //
 type FeedingLogRowOfData = {
   timestamp: number;
@@ -494,6 +546,7 @@ function writeFeedingLogRowOfData(
       ]
     ]);
 }
+
 function getAllFeedingsWithQuestionMark() {
   const sheet = SpreadsheetApp.openById(
     FOOD_DASHBOARD_SPREADSHEET_ID
@@ -556,6 +609,50 @@ function getAllFeedingsWithQuestionMark() {
 
   return data;
 }
+
+function getAllFeedingLogData(): FeedingLogRowOfData[] {
+  const sheet = SpreadsheetApp.openById(
+    FOOD_DASHBOARD_SPREADSHEET_ID
+  ).getSheetByName(CONSTANTS.SHEET_NAMES.FeedingLogs);
+
+  return sheet
+    .getDataRange()
+    .getValues()
+    .slice(3)
+    .map(row => {
+      const [
+        timestamp,
+        date,
+        amPM,
+        catName,
+        status,
+        food1,
+        food1Status,
+        food2,
+        food2Status,
+        food3,
+        food3Status,
+        food4,
+        food4Status
+      ] = row;
+      return {
+        timestamp,
+        date,
+        amPM,
+        catName,
+        status,
+        food1,
+        food1Status,
+        food2,
+        food2Status,
+        food3,
+        food3Status,
+        food4,
+        food4Status
+      };
+    });
+}
+
 // ====================== HELPERS ===================== //
 function convertDateAmPmIntoPrettyDate(date: Date, amPM: "AM" | "PM"): string {
   return (
