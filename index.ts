@@ -107,10 +107,7 @@ function setupPlatingForm() {
   const form = clearAndOpenForm(PLATING_FORM_URL, {
     title: "Food Plating Form"
   });
-  form
-    .addTextItem()
-    .setTitle("Preparer for 7/20/2019 AM")
-    .setRequired(true);
+  addPreparerDateAndTimeQuestionToForm(form);
 
   getAllCatsInStore()
     .map(
@@ -192,7 +189,7 @@ function onFormSubmit(event) {
   }
 }
 function onPlatingFormSubmit(responses: IResponse[]) {
-  const { date, amPM, chef } = getDateAndChef(responses);
+  const { date, amPM, preparer } = getDateAndPreparer(responses);
   const timestamp = Date.now();
   const feedingData = responses.reduce(
     (all, resp) => ({
@@ -332,18 +329,36 @@ function onRecordingFormSubmit(responses: IResponse[]) {
 }
 
 // ====================== GENERAL ===================== //
-function getDateAndChef(
+function getDateAndPreparer(
   responses: IResponse[]
-): { date: string; amPM: "AM" | "PM"; chef: string } {
-  const dateRegex = /(\d\d?\s*\/\s*\d\d?\s*\/\s*\d\d\d\d)\s+(AM|PM)/;
-  const dateKey = responses
-    .map(({ question }) => question)
-    .find(key => key.match(dateRegex));
-  const match = dateKey.match(dateRegex);
-  const date = match[1];
-  const amPM = match[2] as "AM" | "PM";
-  const chef = responses[dateKey];
-  return { date, amPM, chef };
+): { date: string; amPM: "AM" | "PM"; preparer: string } {
+  responses.forEach(r => addLogToLogSheet(r, "response"));
+  return {
+    date: responses.find(({ question }) => question === "Date of Feeding")
+      .answer,
+    amPM: responses.find(({ question }) => question === "AM / PM").answer as
+      | "AM"
+      | "PM",
+    preparer: responses.find(({ question }) => question === "Preparer").answer
+  };
+}
+
+function addPreparerDateAndTimeQuestionToForm(
+  form: GoogleAppsScript.Forms.Form
+) {
+  form
+    .addTextItem()
+    .setTitle("Preparer")
+    .setRequired(true);
+  form
+    .addDateItem()
+    .setTitle("Date of Feeding")
+    .setRequired(true);
+  form
+    .addMultipleChoiceItem()
+    .setTitle("AM / PM")
+    .setRequired(true)
+    .setChoiceValues(["AM", "PM"]);
 }
 
 // ====================== PLATING ===================== //
