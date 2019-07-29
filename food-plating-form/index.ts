@@ -1,3 +1,49 @@
+// https://tc39.github.io/ecma262/#sec-array.prototype.find
+if (!Array.prototype.find) {
+  Object.defineProperty(Array.prototype, "find", {
+    value: function(predicate) {
+      // 1. Let O be ? ToObject(this value).
+      if (this == null) {
+        throw new TypeError('"this" is null or not defined');
+      }
+
+      var o = Object(this);
+
+      // 2. Let len be ? ToLength(? Get(O, "length")).
+      var len = o.length >>> 0;
+
+      // 3. If IsCallable(predicate) is false, throw a TypeError exception.
+      if (typeof predicate !== "function") {
+        throw new TypeError("predicate must be a function");
+      }
+
+      // 4. If thisArg was supplied, let T be thisArg; else let T be undefined.
+      var thisArg = arguments[1];
+
+      // 5. Let k be 0.
+      var k = 0;
+
+      // 6. Repeat, while k < len
+      while (k < len) {
+        // a. Let Pk be ! ToString(k).
+        // b. Let kValue be ? Get(O, Pk).
+        // c. Let testResult be ToBoolean(? Call(predicate, T, « kValue, k, O »)).
+        // d. If testResult is true, return kValue.
+        var kValue = o[k];
+        if (predicate.call(thisArg, kValue, k, o)) {
+          return kValue;
+        }
+        // e. Increase k by 1.
+        k++;
+      }
+
+      // 7. Return undefined.
+      return undefined;
+    },
+    configurable: true,
+    writable: true,
+  });
+}
 // ====================== CONSTANTS ===================== //
 const FOOD_DASHBOARD_SPREADSHEET_ID = "1gQNMd06hj6Lsh1OPWKC1L0wgc12aqiNroR97XV-D2cI";
 const PLATING_FORM_URL =
@@ -13,6 +59,11 @@ const CONSTANTS = {
   },
 };
 const FOOD_RECORD_OPTIONS = ["Yes", "Half", "No"];
+const FOOD_RECORD_MAP = {
+  Yes: "Y",
+  No: "N",
+  Half: "H",
+};
 // ====================== TYPES ===================== //
 type CatFeedingData = {
   [catName: string]: {
@@ -24,6 +75,7 @@ type CatFeedingData = {
 };
 
 type IResponse = { question: string; answer: string };
+type FoodRecordOptions = "Yes" | "Half" | "No";
 
 // ======================== Setup ====================== //
 function setupPlatingForm() {
@@ -77,21 +129,13 @@ function setupRecordingForm() {
     prettyDate: string
   ) {
     const item = form.addMultipleChoiceItem();
-    item.setTitle(`Did '${catName}' eat all of the '${foodName}' on ${prettyDate}?`);
+    item.setTitle(convertFoodInfoIntoQuestion({ catName, foodName, prettyDate }));
     item.setChoices(FOOD_RECORD_OPTIONS.map(option => item.createChoice(option)));
     item.setRequired(true);
   }
 
   getAllFeedingsWithQuestionMark().forEach(data => {
-    const prettyDate =
-      data.date.getMonth() +
-      1 +
-      "/" +
-      data.date.getDate() +
-      "/" +
-      data.date.getFullYear() +
-      " " +
-      data.amPM;
+    const prettyDate = convertDateAmPmIntoPrettyDate(data.date, data.amPM);
     form.addPageBreakItem().setTitle(`${data.catName}`);
 
     data.foods.forEach(({ name }) => {
@@ -99,6 +143,7 @@ function setupRecordingForm() {
     });
   });
 }
+// ============================ Triggers ======================== //
 function onPlatingFormSubmit(event) {
   const responses: IResponse[] = event.response.getItemResponses().map(itemResponse => ({
     question: itemResponse.getItem().getTitle(),
@@ -116,8 +161,9 @@ function onPlatingFormSubmit(event) {
   );
 
   const sheet = SpreadsheetApp.openById(FOOD_DASHBOARD_SPREADSHEET_ID).getSheetByName(
-    "Test"
+    CONSTANTS.SHEET_NAMES.FeedingLogs
   );
+
   Object.keys(feedingData).forEach(catName => {
     const rowValues = getFeedingRowData({
       timestamp,
@@ -130,6 +176,84 @@ function onPlatingFormSubmit(event) {
       .insertRowBefore(3)
       .getRange(3, 1, 1, rowValues.length)
       .setValues([rowValues]);
+  });
+}
+
+function onRecordingFormSubmit(event) {
+  const rawData: {
+    prettyDate: string;
+    catName: string;
+    foodName: string;
+    response: FoodRecordOptions;
+  }[] = event.response
+    .getItemResponses()
+    .map(itemResponse => ({
+      question: itemResponse.getItem().getTitle(),
+      answer: itemResponse.getResponse(),
+    }))
+    .map(({ question, answer }) => {
+      const { foodName, catName, prettyDate }: FoodInfo = convertQuestionIntoFoodInfo(
+        question
+      );
+
+      return { prettyDate, catName, foodName, response: answer as FoodRecordOptions };
+    });
+
+  const tempTransformedData = rawData.reduce((all, item) => {
+    const key = `${item.prettyDate}|${item.catName}`;
+    return { ...all, [key]: { ...all[key], [item.foodName]: item.response } };
+  }, {});
+
+  const data = Object.keys(tempTransformedData).map(prettyDateAndCatName => {
+    const [prettyDate, catName] = prettyDateAndCatName.split("|");
+    const { date, amPM } = convertPrettyDateIntoDateAmPm(prettyDate);
+    return {
+      date,
+      amPM,
+      catName,
+      results: tempTransformedData[prettyDateAndCatName] as {
+        [foodName: string]: FoodRecordOptions;
+      },
+    };
+  });
+
+  const sheet = SpreadsheetApp.openById(FOOD_DASHBOARD_SPREADSHEET_ID).getSheetByName(
+    CONSTANTS.SHEET_NAMES.FeedingLogs
+  );
+
+  data.forEach(item => {
+    sheet
+      .getRange("B3:D")
+      .getValues()
+      .map((row, i) => ({ i, date: row[0], amPM: row[1], catName: row[2] }))
+      .filter(
+        ({ date, amPM, catName }) =>
+          item.date.toString() === date.toString() &&
+          item.amPM === amPM &&
+          item.catName === catName
+      )
+      .map(({ i }) => i + 3)
+      .forEach(i => {
+        const existingData = getRowOfFeedingLog(sheet, i);
+        Object.keys(item.results).forEach(result => {
+          const newStatus = item.results[result];
+          switch (result) {
+            case existingData.food1:
+              existingData.food1Status = newStatus;
+              break;
+            case existingData.food2:
+              existingData.food2Status = newStatus;
+              break;
+            case existingData.food3:
+              existingData.food3Status = newStatus;
+              break;
+            case existingData.food4:
+              existingData.food4Status = newStatus;
+              break;
+          }
+        });
+        writeFeedingLogRowOfData(sheet, i, existingData);
+      });
   });
 }
 
@@ -185,27 +309,80 @@ function getFeedingRowData(data: {
   ];
 }
 // ====================== RECORDING ===================== //
+type FeedingLogRowOfData = {
+  timestamp: number;
+  date: Date;
+  amPM: "AM" | "PM";
+  catName: string;
+  status: string;
+  food1: string;
+  food1Status: string;
+  food2: string;
+  food2Status: string;
+  food3: string;
+  food3Status: string;
+  food4: string;
+  food4Status: string;
+};
+function getRowOfFeedingLog(
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
+  index: number
+): FeedingLogRowOfData {
+  const [
+    timestamp,
+    date,
+    amPM,
+    catName,
+    status,
+    food1,
+    food1Status,
+    food2,
+    food2Status,
+    food3,
+    food3Status,
+    food4,
+    food4Status,
+  ] = sheet.getRange(index, 1, 1, 13).getValues()[0];
+  return {
+    timestamp,
+    date,
+    amPM,
+    catName,
+    status,
+    food1,
+    food1Status,
+    food2,
+    food2Status,
+    food3,
+    food3Status,
+    food4,
+    food4Status,
+  };
+}
 
-function getAllFeedingsWithQuestionMark() {
-  const sheet = SpreadsheetApp.openById(FOOD_DASHBOARD_SPREADSHEET_ID).getSheetByName(
-    FEEDING_LOGS_SHEET_NAME
-  );
-
-  const data: {
-    timestamp: string;
-    date: Date;
-    amPM: string;
-    catName: string;
-    status: string;
-    foods: { name: string; status: string }[];
-  }[] = sheet
-    .getRange("E3:E")
-    .getValues()
-    .map((row, i) => ({ i, value: row[0] }))
-    .filter(({ value }) => value === "?")
-    .map(({ i }) => i + 3)
-    .map(index => {
-      const [
+function writeFeedingLogRowOfData(
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
+  index: number,
+  {
+    timestamp,
+    date,
+    amPM,
+    catName,
+    status,
+    food1,
+    food1Status,
+    food2,
+    food2Status,
+    food3,
+    food3Status,
+    food4,
+    food4Status,
+  }: FeedingLogRowOfData
+): void {
+  sheet
+    .getRange(index, 1, 1, 13)
+    .setValues([
+      [
         timestamp,
         date,
         amPM,
@@ -219,7 +396,43 @@ function getAllFeedingsWithQuestionMark() {
         food3Status,
         food4,
         food4Status,
-      ] = sheet.getRange(index, 1, 1, 13).getValues()[0];
+      ],
+    ]);
+}
+function getAllFeedingsWithQuestionMark() {
+  const sheet = SpreadsheetApp.openById(FOOD_DASHBOARD_SPREADSHEET_ID).getSheetByName(
+    CONSTANTS.SHEET_NAMES.FeedingLogs
+  );
+
+  const data: {
+    timestamp: number;
+    date: Date;
+    amPM: "AM" | "PM";
+    catName: string;
+    status: string;
+    foods: { name: string; status: string }[];
+  }[] = sheet
+    .getRange("E3:E")
+    .getValues()
+    .map((row, i) => ({ i, value: row[0] }))
+    .filter(({ value }) => value === "?")
+    .map(({ i }) => i + 3)
+    .map(index => {
+      const {
+        timestamp,
+        date,
+        amPM,
+        catName,
+        status,
+        food1,
+        food1Status,
+        food2,
+        food2Status,
+        food3,
+        food3Status,
+        food4,
+        food4Status,
+      } = getRowOfFeedingLog(sheet, index);
 
       const foods = [];
 
@@ -249,6 +462,20 @@ function getAllFeedingsWithQuestionMark() {
   return data;
 }
 // ====================== HELPERS ===================== //
+function convertDateAmPmIntoPrettyDate(date: Date, amPM: "AM" | "PM"): string {
+  return (
+    date.getMonth() + 1 + "/" + date.getDate() + "/" + date.getFullYear() + " " + amPM
+  );
+}
+function convertPrettyDateIntoDateAmPm(
+  prettyDate: string
+): { date: Date; amPM: "AM" | "PM" } {
+  const dateRegex = /(\d\d?\s*\/\s*\d\d?\s*\/\s*\d\d\d\d)\s+(AM|PM)/;
+  const match = prettyDate.match(dateRegex);
+  const date = new Date(match[1]);
+  const amPM = match[2] as "AM" | "PM";
+  return { date, amPM };
+}
 function clearAndOpenForm(url: string, options?: { title?: string }) {
   const form = FormApp.openByUrl(url);
   form.deleteAllResponses();
@@ -296,6 +523,25 @@ function makeYesNoBarGraph(data: FoodHistoryData): GoogleAppsScript.Charts.Chart
     .setColors(["green", "red"])
     .build();
   return chart;
+}
+type FoodInfo = { foodName: string; catName: string; prettyDate: string };
+function convertQuestionIntoFoodInfo(question: string): FoodInfo | null {
+  const match = /Did '(.*)' eat all of the '(.*)' on (\d\d?\s*\/\s*\d\d?\s*\/\s*\d\d\d\d\s+[AM|PM])\?/.exec(
+    question
+  );
+  // const match = question.match(questionRegex);
+  if (!match) {
+    return null;
+  }
+  const [ignore, foodName, catName, prettyDate] = match;
+  return { foodName, catName, prettyDate };
+}
+function convertFoodInfoIntoQuestion({
+  catName,
+  foodName,
+  prettyDate,
+}: FoodInfo): string {
+  return `Did '${catName}' eat all of the '${foodName}' on ${prettyDate}?`;
 }
 
 // ====================== SPREADSHEET ===================== //
