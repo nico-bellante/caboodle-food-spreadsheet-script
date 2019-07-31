@@ -1,13 +1,21 @@
 let LOG_COUNT = 1;
 function addLogToLogSheet(obj: any, note?: string) {
-  const sheet = SpreadsheetApp.openById(
-    FOOD_DASHBOARD_SPREADSHEET_ID
-  ).getSheetByName("Logs");
+  const sheet = SpreadsheetApp.openById(FOOD_DASHBOARD_SPREADSHEET_ID).getSheetByName(
+    "Logs",
+  );
   const THIS_LOG_NO = LOG_COUNT++;
   sheet.getRange(THIS_LOG_NO, 1).setValue(JSON.stringify(obj, null, 4));
   if (note) {
     sheet.getRange(THIS_LOG_NO, 2).setValue(note);
   }
+}
+if (!String.prototype.startsWith) {
+  Object.defineProperty(String.prototype, "startsWith", {
+    value: function(search, pos) {
+      pos = !pos || pos < 0 ? 0 : +pos;
+      return this.substring(pos, pos + search.length) === search;
+    },
+  });
 }
 // https://tc39.github.io/ecma262/#sec-array.prototype.find
 if (!Array.prototype.find) {
@@ -52,12 +60,11 @@ if (!Array.prototype.find) {
       return undefined;
     },
     configurable: true,
-    writable: true
+    writable: true,
   });
 }
 // ====================== CONSTANTS ===================== //
-const FOOD_DASHBOARD_SPREADSHEET_ID =
-  "1gQNMd06hj6Lsh1OPWKC1L0wgc12aqiNroR97XV-D2cI";
+const FOOD_DASHBOARD_SPREADSHEET_ID = "1gQNMd06hj6Lsh1OPWKC1L0wgc12aqiNroR97XV-D2cI";
 const PLATING_FORM_URL =
   "https://docs.google.com/forms/d/1AKtI-Ey5P1QkrMjNy-nQaT-9w-WA6CE8VtoUsHAhMtI/edit";
 const OLD_RECORDING_FORM =
@@ -67,18 +74,18 @@ const CONSTANTS = {
   SHEET_NAMES: {
     BoardingSchedule: "Boarding Schedule",
     AllCatsInStore: "_private_all_cats_at_store",
-    FeedingLogs: "Feeding Logs"
+    FeedingLogs: "Feeding Logs",
   },
   TITLES: {
     PlatingForm: "Food Plating Form",
-    RecordingForm: "Food Recording Form"
-  }
+    RecordingForm: "Food Recording Form",
+  },
 };
 const FOOD_RECORD_OPTIONS = ["Yes", "Half", "No"];
 const FOOD_RECORD_MAP = {
   Yes: "Y",
   No: "N",
-  Half: "H"
+  Half: "H",
 };
 // ====================== TYPES ===================== //
 type CatFeedingData = {
@@ -101,42 +108,60 @@ type CatSchema = {
 };
 type IResponse = { question: string; answer: string };
 type FoodRecordOptions = "Yes" | "Half" | "No";
+type FoodHistoryData = { foodName: string; yes: number; half: number; no: number };
+type FoodInfo = { foodName: string; catName: string; prettyDate: string };
 
 // ======================== Setup ====================== //
 function setupPlatingForm() {
   const form = clearAndOpenForm(PLATING_FORM_URL, {
-    title: "Food Plating Form"
+    title: `${CONSTANTS.TITLES.PlatingForm} for ${getNowsPrettyDate()}`,
   });
-  addPreparerDateAndTimeQuestionToForm(form);
-
+  const catFoodStats = getFoodStatsPerCat();
+  addLogToLogSheet(catFoodStats, "catFoodStats");
   getAllCatsInStore()
     .map(
       (
-        cat: CatSchema
+        cat: CatSchema,
       ): {
         name: string;
         dietRestrictions?: string;
         otherNotes?: string;
-        favoriteFoods?: FoodHistoryData;
+        favoriteFoods?: FoodHistoryData[];
       } => {
         addLogToLogSheet(`processing: ${cat.name}`);
         return {
           name: cat.name,
           dietRestrictions: "TODO DIET RESTRICTION",
-          favoriteFoods: {
-            "Food A": { yes: 10, no: 2 },
-            "Food B": { yes: 8, no: 3 },
-            "Food C": { yes: 5, no: 4 }
-          }
+          favoriteFoods: (() => {
+            const thisCatStats = catFoodStats[cat.name];
+            if (!thisCatStats) {
+              return null;
+            }
+
+            const totalFeedingsForFood = (f: FoodHistoryData) => f.yes + f.half + f.no;
+
+            const data = Object.keys(thisCatStats)
+              .map(k => thisCatStats[k])
+              .filter(v => totalFeedingsForFood(v) >= 2)
+              .sort((a, b) => totalFeedingsForFood(b) - totalFeedingsForFood(a));
+
+            if (data.length === 0) {
+              return null;
+            }
+
+            return data;
+          })(),
         };
-      }
+      },
     )
     .forEach(data => {
       form.addPageBreakItem().setTitle(data.name);
-      form
-        .addImageItem()
-        .setTitle("Food for past X")
-        .setImage(makeYesNoBarGraph(data.favoriteFoods).getBlob());
+      if (data.favoriteFoods) {
+        form
+          .addImageItem()
+          .setTitle(`Recent Food Data for ${data.name}`)
+          .setImage(makeYesNoBarGraph(data.favoriteFoods).getBlob());
+      }
       form
         .addTextItem()
         .setTitle(`${data.name}'s Food`)
@@ -146,25 +171,21 @@ function setupPlatingForm() {
 
 function setupRecordingForm() {
   const form = clearAndOpenForm(RECORDING_FORM_URL, {
-    title: CONSTANTS.TITLES.RecordingForm
+    title: CONSTANTS.TITLES.RecordingForm,
   });
 
   function createMCQuestionForFood(
     catName: string,
     foodName: string,
-    prettyDate: string
+    prettyDate: string,
   ) {
     const item = form.addMultipleChoiceItem();
-    item.setTitle(
-      convertFoodInfoIntoQuestion({ catName, foodName, prettyDate })
-    );
-    item.setChoices(
-      FOOD_RECORD_OPTIONS.map(option => item.createChoice(option))
-    );
+    item.setTitle(convertFoodInfoIntoQuestion({ catName, foodName, prettyDate }));
+    item.setChoices(FOOD_RECORD_OPTIONS.map(option => item.createChoice(option)));
     item.setRequired(true);
   }
 
-  getAllFeedingsWithQuestionMark().forEach(data => {
+  getAllFeedingsWithQuestionMark({ date: new Date() }).forEach(data => {
     const prettyDate = convertDateAmPmIntoPrettyDate(data.date, data.amPM);
     form.addPageBreakItem().setTitle(`${data.catName}`);
 
@@ -175,33 +196,34 @@ function setupRecordingForm() {
 }
 // ============================ Triggers ======================== //
 function onFormSubmit(event) {
-  const responses: IResponse[] = event.response
-    .getItemResponses()
-    .map(itemResponse => ({
-      question: itemResponse.getItem().getTitle(),
-      answer: itemResponse.getResponse()
-    }));
-  const title = FormApp.openByUrl(RECORDING_FORM_URL).getTitle();
-  if (title === CONSTANTS.TITLES.PlatingForm) {
+  const responses: IResponse[] = event.response.getItemResponses().map(itemResponse => ({
+    question: itemResponse.getItem().getTitle(),
+    answer: itemResponse.getResponse(),
+  }));
+  const title = FormApp.openByUrl(PLATING_FORM_URL).getTitle();
+  if (title.startsWith(CONSTANTS.TITLES.PlatingForm)) {
     onPlatingFormSubmit(responses);
-  } else if (title === CONSTANTS.TITLES.RecordingForm) {
+  } else if (title.startsWith(CONSTANTS.TITLES.RecordingForm)) {
     onRecordingFormSubmit(responses);
   }
 }
 function onPlatingFormSubmit(responses: IResponse[]) {
-  const { date, amPM, preparer } = getDateAndPreparer(responses);
+  const { date, amPM } = getDate(FormApp.openByUrl(PLATING_FORM_URL));
+  addLogToLogSheet({ date, amPM });
   const timestamp = Date.now();
   const feedingData = responses.reduce(
     (all, resp) => ({
       ...all,
-      ...processResponseForFeedingData(resp)
+      ...processResponseForFeedingData(resp),
     }),
-    {}
+    {},
   );
 
-  const sheet = SpreadsheetApp.openById(
-    FOOD_DASHBOARD_SPREADSHEET_ID
-  ).getSheetByName(CONSTANTS.SHEET_NAMES.FeedingLogs);
+  addLogToLogSheet(feedingData, "feedingData");
+
+  const sheet = SpreadsheetApp.openById(FOOD_DASHBOARD_SPREADSHEET_ID).getSheetByName(
+    CONSTANTS.SHEET_NAMES.FeedingLogs,
+  );
 
   Object.keys(feedingData).forEach(catName => {
     const rowValues = getFeedingRowData({
@@ -209,7 +231,7 @@ function onPlatingFormSubmit(responses: IResponse[]) {
       date,
       amPM,
       catName,
-      ...feedingData[catName]
+      ...feedingData[catName],
     });
     sheet
       .insertRowBefore(3)
@@ -221,7 +243,7 @@ function onPlatingFormSubmit(responses: IResponse[]) {
 function testOnRecordingFormSubmit() {
   const o = {
     question: `Did 'Foo' eat all of the 'foo fooo' on 7/20/2019 AM?`,
-    answer: "Yes"
+    answer: "Yes",
   };
   const arr = [o];
   addLogToLogSheet(o, "o");
@@ -240,11 +262,11 @@ function onRecordingFormSubmit(responses: IResponse[]) {
     .map(({ question, answer }) => {
       const result: FoodInfo | null = convertQuestionIntoFoodInfo(question);
       addLogToLogSheet(
-        `question: ${JSON.stringify(
-          question,
+        `question: ${JSON.stringify(question, null, 4)}; answer: ${JSON.stringify(
+          answer,
           null,
-          4
-        )}; answer: ${JSON.stringify(answer, null, 4)}`
+          4,
+        )}`,
       );
       addLogToLogSheet(result, "result");
       if (result === null) {
@@ -255,7 +277,7 @@ function onRecordingFormSubmit(responses: IResponse[]) {
         prettyDate,
         catName,
         foodName,
-        response: answer as FoodRecordOptions
+        response: answer as FoodRecordOptions,
       };
     })
     .filter(Boolean);
@@ -264,7 +286,7 @@ function onRecordingFormSubmit(responses: IResponse[]) {
     const key = `${item.prettyDate}|${item.catName}`;
     return {
       ...all,
-      [key]: { ...all[key], [item.foodName]: FOOD_RECORD_MAP[item.response] }
+      [key]: { ...all[key], [item.foodName]: FOOD_RECORD_MAP[item.response] },
     };
   }, {});
 
@@ -279,15 +301,15 @@ function onRecordingFormSubmit(responses: IResponse[]) {
       catName,
       results: tempTransformedData[prettyDateAndCatName] as {
         [foodName: string]: FoodRecordOptions;
-      }
+      },
     };
   });
 
   addLogToLogSheet(tempTransformedData, "tempTransformedData");
 
-  const sheet = SpreadsheetApp.openById(
-    FOOD_DASHBOARD_SPREADSHEET_ID
-  ).getSheetByName(CONSTANTS.SHEET_NAMES.FeedingLogs);
+  const sheet = SpreadsheetApp.openById(FOOD_DASHBOARD_SPREADSHEET_ID).getSheetByName(
+    CONSTANTS.SHEET_NAMES.FeedingLogs,
+  );
 
   data.forEach(item => {
     sheet
@@ -329,23 +351,12 @@ function onRecordingFormSubmit(responses: IResponse[]) {
 }
 
 // ====================== GENERAL ===================== //
-function getDateAndPreparer(
-  responses: IResponse[]
-): { date: string; amPM: "AM" | "PM"; preparer: string } {
-  responses.forEach(r => addLogToLogSheet(r, "response"));
-  return {
-    date: responses.find(({ question }) => question === "Date of Feeding")
-      .answer,
-    amPM: responses.find(({ question }) => question === "AM / PM").answer as
-      | "AM"
-      | "PM",
-    preparer: responses.find(({ question }) => question === "Preparer").answer
-  };
+function getDate(form: GoogleAppsScript.Forms.Form): { date: Date; amPM: "AM" | "PM" } {
+  const title = form.getTitle();
+  return convertPrettyDateIntoDateAmPm(title);
 }
 
-function addPreparerDateAndTimeQuestionToForm(
-  form: GoogleAppsScript.Forms.Form
-) {
+function addPreparerDateAndTimeQuestionToForm(form: GoogleAppsScript.Forms.Form) {
   form
     .addTextItem()
     .setTitle("Preparer")
@@ -362,13 +373,9 @@ function addPreparerDateAndTimeQuestionToForm(
 }
 
 // ====================== PLATING ===================== //
-function processResponseForFeedingData(
-  response: IResponse
-): CatFeedingData | null {
+function processResponseForFeedingData(response: IResponse): CatFeedingData | null {
   const match = response.question.match(/(\w+)\'s Food/);
-  const [food1, food2, food3, food4, ...rest] = response.answer.split(
-    /\s*[\/\-\,]\s*/
-  );
+  const [food1, food2, food3, food4, ...rest] = response.answer.split(/\s*[\/\-\,]\s*/);
   return match && match[1] && food1 !== ""
     ? { [match[1]]: { food1, food2, food3, food4 } }
     : null;
@@ -398,26 +405,28 @@ function getFeedingRowData(data: {
     data.food3 || "--",
     getQuestionMarkOrDash(data.food3),
     data.food4 || "--",
-    getQuestionMarkOrDash(data.food4)
+    getQuestionMarkOrDash(data.food4),
   ];
 }
 function testGetFoodStatsPerCat() {
   const foodStatsPerCat = getFoodStatsPerCat();
   addLogToLogSheet(foodStatsPerCat, "foodStatsPerCat");
 }
-function getFoodStatsPerCat() {
+function getFoodStatsPerCat(): {
+  [catName: string]: { [foodName: string]: FoodHistoryData };
+} {
   const data = getAllFeedingLogData();
 
   function addFoodToCatInfo(
-    catInfo: object,
+    catInfo: { [foodName: string]: FoodHistoryData },
     foodName?: string,
-    foodStatus?: string
+    foodStatus?: string,
   ) {
     if (!foodStatus || foodStatus == "--" || foodStatus == "-") {
       return catInfo;
     }
 
-    const thisFoodsInfo = catInfo[foodName] || { yes: 0, no: 0, half: 0 };
+    const thisFoodsInfo = catInfo[foodName] || { foodName, yes: 0, no: 0, half: 0 };
 
     if (foodStatus === "Y") {
       thisFoodsInfo.yes++;
@@ -433,22 +442,9 @@ function getFoodStatsPerCat() {
   return data.reduce((all, row) => {
     let catInfo = all[row.catName] || {};
     let updatedCatInfo = addFoodToCatInfo(catInfo, row.food1, row.food1Status);
-    updatedCatInfo = addFoodToCatInfo(
-      updatedCatInfo,
-      row.food2,
-      row.food2Status
-    );
-    updatedCatInfo = addFoodToCatInfo(
-      updatedCatInfo,
-      row.food3,
-      row.food3Status
-    );
-    updatedCatInfo = addFoodToCatInfo(
-      updatedCatInfo,
-      row.food4,
-      row.food4Status
-    );
-
+    updatedCatInfo = addFoodToCatInfo(updatedCatInfo, row.food2, row.food2Status);
+    updatedCatInfo = addFoodToCatInfo(updatedCatInfo, row.food3, row.food3Status);
+    updatedCatInfo = addFoodToCatInfo(updatedCatInfo, row.food4, row.food4Status);
     return { ...all, [row.catName]: updatedCatInfo };
   }, {});
 }
@@ -471,7 +467,7 @@ type FeedingLogRowOfData = {
 };
 function getRowOfFeedingLog(
   sheet: GoogleAppsScript.Spreadsheet.Sheet,
-  index: number
+  index: number,
 ): FeedingLogRowOfData {
   const [
     timestamp,
@@ -486,7 +482,7 @@ function getRowOfFeedingLog(
     food3,
     food3Status,
     food4,
-    food4Status
+    food4Status,
   ] = sheet.getRange(index, 1, 1, 13).getValues()[0];
 
   const status = sheet.getRange(index, 5).getFormula();
@@ -503,7 +499,7 @@ function getRowOfFeedingLog(
     food3,
     food3Status,
     food4,
-    food4Status
+    food4Status,
   };
 }
 
@@ -523,8 +519,8 @@ function writeFeedingLogRowOfData(
     food3,
     food3Status,
     food4,
-    food4Status
-  }: FeedingLogRowOfData
+    food4Status,
+  }: FeedingLogRowOfData,
 ): void {
   sheet
     .getRange(index, 1, 1, 13)
@@ -542,15 +538,18 @@ function writeFeedingLogRowOfData(
         food3,
         food3Status,
         food4,
-        food4Status
-      ]
+        food4Status,
+      ],
     ]);
 }
 
-function getAllFeedingsWithQuestionMark() {
-  const sheet = SpreadsheetApp.openById(
-    FOOD_DASHBOARD_SPREADSHEET_ID
-  ).getSheetByName(CONSTANTS.SHEET_NAMES.FeedingLogs);
+function getAllFeedingsWithQuestionMark(forDate?: { date: Date }) {
+  const sheet = SpreadsheetApp.openById(FOOD_DASHBOARD_SPREADSHEET_ID).getSheetByName(
+    CONSTANTS.SHEET_NAMES.FeedingLogs,
+  );
+
+  const dateStringToMatch = forDate ? getDateStringFromDate(forDate.date) : null;
+  const amPMToMatch = forDate ? (forDate.date.getHours() >= 12 ? "PM" : " AM") : null;
 
   const data: {
     timestamp: number;
@@ -579,7 +578,7 @@ function getAllFeedingsWithQuestionMark() {
         food3,
         food3Status,
         food4,
-        food4Status
+        food4Status,
       } = getRowOfFeedingLog(sheet, index);
 
       const foods = [];
@@ -603,17 +602,23 @@ function getAllFeedingsWithQuestionMark() {
         amPM,
         catName,
         status,
-        foods
+        foods,
       };
-    });
+    })
+    .filter(
+      item =>
+        !dateStringToMatch ||
+        (getDateStringFromDate(item.date) === dateStringToMatch &&
+          item.amPM === amPMToMatch),
+    );
 
   return data;
 }
 
 function getAllFeedingLogData(): FeedingLogRowOfData[] {
-  const sheet = SpreadsheetApp.openById(
-    FOOD_DASHBOARD_SPREADSHEET_ID
-  ).getSheetByName(CONSTANTS.SHEET_NAMES.FeedingLogs);
+  const sheet = SpreadsheetApp.openById(FOOD_DASHBOARD_SPREADSHEET_ID).getSheetByName(
+    CONSTANTS.SHEET_NAMES.FeedingLogs,
+  );
 
   return sheet
     .getDataRange()
@@ -633,7 +638,7 @@ function getAllFeedingLogData(): FeedingLogRowOfData[] {
         food3,
         food3Status,
         food4,
-        food4Status
+        food4Status,
       ] = row;
       return {
         timestamp,
@@ -648,26 +653,29 @@ function getAllFeedingLogData(): FeedingLogRowOfData[] {
         food3,
         food3Status,
         food4,
-        food4Status
+        food4Status,
       };
     });
 }
 
 // ====================== HELPERS ===================== //
+
+function getNowsPrettyDate(): string {
+  const now = new Date();
+  return `${getDateStringFromDate(now)} ${now.getHours() >= 12 ? "PM" : "AM"}`;
+}
+
+function getDateStringFromDate(date: Date) {
+  return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+}
+
 function convertDateAmPmIntoPrettyDate(date: Date, amPM: "AM" | "PM"): string {
   return (
-    date.getMonth() +
-    1 +
-    "/" +
-    date.getDate() +
-    "/" +
-    date.getFullYear() +
-    " " +
-    amPM
+    date.getMonth() + 1 + "/" + date.getDate() + "/" + date.getFullYear() + " " + amPM
   );
 }
 function convertPrettyDateIntoDateAmPm(
-  prettyDate: string
+  prettyDate: string,
 ): { date: Date; amPM: "AM" | "PM" } {
   const dateRegex = /(\d\d?\s*\/\s*\d\d?\s*\/\s*\d\d\d\d)\s+(AM|PM)/;
   const match = prettyDate.match(dateRegex);
@@ -687,36 +695,23 @@ function clearAndOpenForm(url: string, options?: { title?: string }) {
   return form;
 }
 
-type FoodHistoryData = {
-  [foodName: string]: { yes: number; no: number };
-};
+function makeYesNoBarGraph(data: FoodHistoryData[]): GoogleAppsScript.Charts.Chart {
+  const maxTotalFeedings = data.reduce((max: number, item: FoodHistoryData) => {
+    return Math.max(max, item.yes + item.half + item.no);
+  }, 0);
 
-function makeYesNoBarGraph(
-  data: FoodHistoryData
-): GoogleAppsScript.Charts.Chart {
-  const maxTotalFeedings = Object.keys(data).reduce(
-    (max: number, foodName: string) => {
-      const thisRow = data[foodName];
-      return Math.max(
-        max,
-        Object.keys(thisRow)
-          .map(k => thisRow[k])
-          .reduce((a, b) => a + b, 0)
-      );
-    },
-    0
-  );
   let dataTableBuilder = Charts.newDataTable()
-    .addColumn(Charts.ColumnType.STRING, "Month")
+    .addColumn(Charts.ColumnType.STRING, "Food")
     .addColumn(Charts.ColumnType.NUMBER, "Yes")
-    // .addColumn(Charts.ColumnType.NUMBER, 'Half')
+    .addColumn(Charts.ColumnType.NUMBER, "Half")
     .addColumn(Charts.ColumnType.NUMBER, "No");
 
-  Object.keys(data).forEach(foodName => {
+  data.forEach(item => {
     dataTableBuilder = dataTableBuilder.addRow([
-      foodName,
-      data[foodName].yes,
-      data[foodName].no
+      item.foodName,
+      item.yes.toString(),
+      item.half.toString(),
+      item.no.toString(),
     ]);
   });
 
@@ -724,14 +719,13 @@ function makeYesNoBarGraph(
     .setDataTable(dataTableBuilder as GoogleAppsScript.Charts.DataTableBuilder)
     .setStacked()
     .setRange(0, maxTotalFeedings)
-    .setColors(["green", "red"])
+    .setColors(["palegreen", "palegoldenrod", "lightcoral"])
     .build();
   return chart;
 }
-type FoodInfo = { foodName: string; catName: string; prettyDate: string };
 function convertQuestionIntoFoodInfo(question: string): FoodInfo | null {
   const match = /Did '(.*)' eat all of the '(.*)' on (\d\d?\s*\/\s*\d\d?\s*\/\s*\d\d\d\d\s+(AM|PM))\?/.exec(
-    question
+    question,
   );
   // const match = question.match(questionRegex);
   if (!match) {
@@ -743,35 +737,33 @@ function convertQuestionIntoFoodInfo(question: string): FoodInfo | null {
 function convertFoodInfoIntoQuestion({
   catName,
   foodName,
-  prettyDate
+  prettyDate,
 }: FoodInfo): string {
   return `Did '${catName}' eat all of the '${foodName}' on ${prettyDate}?`;
 }
 
 // ====================== SPREADSHEET ===================== //
 function getTableDataFromSheetAsArrOfObj<T extends {}>(
-  sheet: GoogleAppsScript.Spreadsheet.Sheet
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
 ): T[] {
   const [headers, ...data] = sheet.getDataRange().getValues();
-  return data.map(row =>
-    headers.reduce((o, header, i) => ({ ...o, [header]: row[i] }))
-  );
+  return data.map(row => headers.reduce((o, header, i) => ({ ...o, [header]: row[i] })));
 }
 
 function getAllCatsInStore() {
-  const sheet = SpreadsheetApp.openById(
-    FOOD_DASHBOARD_SPREADSHEET_ID
-  ).getSheetByName(CONSTANTS.SHEET_NAMES.AllCatsInStore);
+  const sheet = SpreadsheetApp.openById(FOOD_DASHBOARD_SPREADSHEET_ID).getSheetByName(
+    CONSTANTS.SHEET_NAMES.AllCatsInStore,
+  );
   return getTableDataFromSheetAsArrOfObj<CatSchema>(sheet).filter(({ name }) =>
-    Boolean(name)
+    Boolean(name),
   );
 }
 
 //// junk
 function testWrite() {
-  const sheet = SpreadsheetApp.openById(
-    FOOD_DASHBOARD_SPREADSHEET_ID
-  ).getSheetByName("Test");
+  const sheet = SpreadsheetApp.openById(FOOD_DASHBOARD_SPREADSHEET_ID).getSheetByName(
+    "Test",
+  );
   sheet.getRange(1, 1).setValue(Date.now());
 }
 
