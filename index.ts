@@ -252,6 +252,7 @@ function writeFeedingLogRowOfData(
       ],
     ]);
 }
+
 type RealFeedingRowData = {
   timestamp: number;
   date: string;
@@ -281,6 +282,7 @@ function prepareFeedingRowData(data: RealFeedingRowData) {
     getQuestionMarkOrDash(data.food4),
   ];
 }
+
 function getAllFeedingLogs(filter: {
   date: Date;
   amPM: "AM" | "PM";
