@@ -70,11 +70,14 @@ function copyFeedingDataMacro() {
   const { date, amPM } = getLastFeedingDate();
 
   // find all cats that were fed on the last feeding and have a (Y/H) for their food result
-  const lastSuccessfulFeedingLogs = getAllFeedingLogs({
-    date,
-    amPM,
-    allowedStatusValues: ["Y", "H"],
-  });
+  const lastSuccessfulFeedingLogs = getAllFeedingLogs(
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.FeedingLogs),
+    {
+      date,
+      amPM,
+      allowedStatusValues: ["Y", "H"],
+    },
+  );
 
   // figure out what the next feeding (this feeding)
   date.setDate(date.getDate() + 1);
@@ -283,11 +286,14 @@ function prepareFeedingRowData(data: RealFeedingRowData) {
   ];
 }
 
-function getAllFeedingLogs(filter: {
-  date: Date;
-  amPM: "AM" | "PM";
-  allowedStatusValues: Array<"Y" | "H" | "N" | "?" | "">;
-}): {
+function getAllFeedingLogs(
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
+  filter: {
+    date: Date;
+    amPM: "AM" | "PM";
+    allowedStatusValues: Array<"Y" | "H" | "N" | "?" | "">;
+  },
+): {
   timestamp: number;
   date: Date;
   amPM: "AM" | "PM";
@@ -295,9 +301,6 @@ function getAllFeedingLogs(filter: {
   status: string;
   foods: { name: string; status: string }[];
 }[] {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
-    SHEET_NAMES.FeedingLogs,
-  );
   const dateStringFilter = getDateStringFromDate(filter.date);
   return sheet
     .getRange("B3:E")
@@ -312,44 +315,56 @@ function getAllFeedingLogs(filter: {
         filter.allowedStatusValues.indexOf(overallStatus) >= 0,
     )
     .map(({ i }) => i + 3)
-    .map(index => {
-      const {
-        timestamp,
-        date,
-        amPM,
-        catName,
-        status,
-        food1,
-        food1Status,
-        food2,
-        food2Status,
-        food3,
-        food3Status,
-        food4,
-        food4Status,
-      } = getRowOfFeedingLog(sheet, index);
-      const foods = [];
+    .map(index => getFeedingLogItem(sheet, index));
+}
 
-      if (food1Status && food1Status !== "--") {
-        foods.push({ name: food1, status: food1Status });
-        if (food2Status && food2Status !== "--") {
-          foods.push({ name: food2, status: food2Status });
-          if (food3Status && food3Status !== "--") {
-            foods.push({ name: food3, status: food3Status });
-            if (food4Status && food4Status !== "--") {
-              foods.push({ name: food4, status: food4Status });
-            }
-          }
+function getFeedingLogItem(
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
+  index: number,
+): {
+  timestamp: number;
+  date: Date;
+  amPM: "AM" | "PM";
+  catName: string;
+  status: string;
+  foods: { name: string; status: string }[];
+} {
+  const {
+    timestamp,
+    date,
+    amPM,
+    catName,
+    status,
+    food1,
+    food1Status,
+    food2,
+    food2Status,
+    food3,
+    food3Status,
+    food4,
+    food4Status,
+  } = getRowOfFeedingLog(sheet, index);
+  const foods = [];
+
+  if (food1Status && food1Status !== "--") {
+    foods.push({ name: food1, status: food1Status });
+    if (food2Status && food2Status !== "--") {
+      foods.push({ name: food2, status: food2Status });
+      if (food3Status && food3Status !== "--") {
+        foods.push({ name: food3, status: food3Status });
+        if (food4Status && food4Status !== "--") {
+          foods.push({ name: food4, status: food4Status });
         }
       }
+    }
+  }
 
-      return {
-        timestamp,
-        date,
-        amPM,
-        catName,
-        status,
-        foods,
-      };
-    });
+  return {
+    timestamp,
+    date,
+    amPM,
+    catName,
+    status,
+    foods,
+  };
 }
