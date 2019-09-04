@@ -382,8 +382,16 @@ function setupRecordingForm() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const config = spreadsheet.getSheetByName("_config");
   const FORM_URL = config.getRange("A1").getValue();
+
+  let form: GoogleAppsScript.Forms.Form;
+  if (FORM_URL === "") {
+    form = FormApp.create("Food Recording Form");
+    config.getRange("A1").setValue(form.getPublishedUrl());
+  } else {
+    form = FormApp.openByUrl(FORM_URL);
+  }
+
   const sheet = spreadsheet.getSheetByName("Feeding Logs");
-  const form = FormApp.openByUrl(FORM_URL);
 
   form.deleteAllResponses();
   form.getItems().forEach(item => form.deleteItem(item));
