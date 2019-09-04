@@ -1,44 +1,4 @@
-function setupRecordingForm() {
-  const form = FormApp.getActiveForm();
-  const sheet: GoogleAppsScript.Spreadsheet.Sheet = SpreadsheetApp.openById(
-    "1gQNMd06hj6Lsh1OPWKC1L0wgc12aqiNroR97XV-D2cI"
-  ).getSheetByName("Feeding Logs");
-
-  form.deleteAllResponses();
-  form.getItems().forEach(item => form.deleteItem(item));
-  form.setTitle("Food Recording Form");
-
-  const feedingData = getAllFeedingsWithQuestionMarks(sheet);
-  const byPrettyDate = feedingData.reduce(
-    (byPrettyDate, item) => {
-      const prettyDate = convertDateAmPmIntoPrettyDate(item.date, item.amPM);
-      return {
-        ...byPrettyDate,
-        [prettyDate]: [...(byPrettyDate[prettyDate] || []), item]
-      };
-    },
-    {} as { [prettyDate: string]: FeedingLogItem[] }
-  );
-
-  Object.keys(byPrettyDate).forEach(prettyDate => {
-    form
-      .addGridItem()
-      .setTitle(`${prettyDate} Feeding`)
-      .setRows(
-        byPrettyDate[prettyDate].reduce(
-          (all, item) => {
-            return [
-              ...all,
-              ...item.foods.map(({ name }) => `${item.catName} - ${name}`)
-            ];
-          },
-          [] as string[]
-        )
-      )
-      .setColumns(["Yes", "Half", "No"])
-      .setRequired(true);
-  });
-}
+const SPREADSHEET_ID = "1gQNMd06hj6Lsh1OPWKC1L0wgc12aqiNroR97XV-D2cI";
 
 type IResponse = { question: string; answer: string[]; rows: string[] };
 type FoodResponseStatus = "Yes" | "No" | "Half";
@@ -51,7 +11,7 @@ function onFormSubmit(event: any) {
       rows: itemResponse
         .getItem()
         .asGridItem()
-        .getRows()
+        .getRows(),
     }));
 
   const byPrettyDate: {
@@ -68,7 +28,7 @@ function onFormSubmit(event: any) {
         return {
           catName,
           foodName,
-          foodStatus: response.answer[i] as FoodResponseStatus
+          foodStatus: response.answer[i] as FoodResponseStatus,
         };
       })
       .reduce(
@@ -76,10 +36,10 @@ function onFormSubmit(event: any) {
           ...byCatName,
           [item.catName]: {
             ...byCatName[item.catName],
-            [item.foodName]: item.foodStatus
-          }
+            [item.foodName]: item.foodStatus,
+          },
         }),
-        {} as { [catName: string]: { [foodName: string]: FoodResponseStatus } }
+        {} as { [catName: string]: { [foodName: string]: FoodResponseStatus } },
       );
 
     return { ...byPrettyDate, [prettyDate]: results };
@@ -89,7 +49,7 @@ function onFormSubmit(event: any) {
   addLogToLogSheet(byPrettyDate, "byprettydate");
 
   const sheet: GoogleAppsScript.Spreadsheet.Sheet = SpreadsheetApp.openById(
-    "1gQNMd06hj6Lsh1OPWKC1L0wgc12aqiNroR97XV-D2cI"
+    SPREADSHEET_ID,
   ).getSheetByName("Feeding Logs");
 
   const existingData = sheet
@@ -105,9 +65,8 @@ function onFormSubmit(event: any) {
         .filter(
           existingItem =>
             existingItem.amPM === amPM &&
-            getDateStringFromDate(existingItem.date) ===
-              getDateStringFromDate(date) &&
-            existingItem.catName === catName
+            getDateStringFromDate(existingItem.date) === getDateStringFromDate(date) &&
+            existingItem.catName === catName,
         )
         .map(({ i }) => i + 3)
         .forEach(i => {
@@ -139,18 +98,6 @@ function onFormSubmit(event: any) {
 
 //////////////////////////////////////////////////////
 
-function getAllFeedingsWithQuestionMarks(
-  sheet: GoogleAppsScript.Spreadsheet.Sheet
-) {
-  return sheet
-    .getRange("E3:E")
-    .getValues()
-    .map((row, i) => ({ i, value: row[0] }))
-    .filter(({ value }) => value === "?")
-    .map(({ i }) => i + 3)
-    .map(i => getFeedingLogItem(sheet, i));
-}
-
 type FeedingLogItem = {
   timestamp: number;
   date: Date;
@@ -162,7 +109,7 @@ type FeedingLogItem = {
 
 function getFeedingLogItem(
   sheet: GoogleAppsScript.Spreadsheet.Sheet,
-  index: number
+  index: number,
 ): FeedingLogItem {
   const {
     timestamp,
@@ -177,7 +124,7 @@ function getFeedingLogItem(
     food3,
     food3Status,
     food4,
-    food4Status
+    food4Status,
   } = getRowOfFeedingLog(sheet, index);
   const foods = [];
 
@@ -200,7 +147,7 @@ function getFeedingLogItem(
     amPM,
     catName,
     status,
-    foods
+    foods,
   };
 }
 
@@ -226,7 +173,7 @@ type FeedingLogRowOfData = {
 
 function getRowOfFeedingLog(
   sheet: GoogleAppsScript.Spreadsheet.Sheet,
-  index: number
+  index: number,
 ): FeedingLogRowOfData {
   // addLogToLogSheet(sheet.getRange(index, 1, 1, 13).getValues()[0], "feedingrowlog");
   const [
@@ -242,7 +189,7 @@ function getRowOfFeedingLog(
     food3,
     food3Status,
     food4,
-    food4Status
+    food4Status,
   ] = sheet.getRange(index, 1, 1, 13).getValues()[0];
 
   const status = sheet.getRange(index, 5).getFormula();
@@ -259,7 +206,7 @@ function getRowOfFeedingLog(
     food3,
     food3Status,
     food4,
-    food4Status
+    food4Status,
   };
 }
 
@@ -279,8 +226,8 @@ function writeFeedingLogRowOfData(
     food3,
     food3Status,
     food4,
-    food4Status
-  }: FeedingLogRowOfData
+    food4Status,
+  }: FeedingLogRowOfData,
 ): void {
   sheet
     .getRange(index, 1, 1, 13)
@@ -298,8 +245,8 @@ function writeFeedingLogRowOfData(
         food3,
         food3Status,
         food4,
-        food4Status
-      ]
+        food4Status,
+      ],
     ]);
 }
 
@@ -329,25 +276,12 @@ function prepareFeedingRowData(data: RealFeedingRowData) {
     data.food3 || "--",
     getQuestionMarkOrDash(data.food3),
     data.food4 || "--",
-    getQuestionMarkOrDash(data.food4)
+    getQuestionMarkOrDash(data.food4),
   ];
 }
 
-function convertDateAmPmIntoPrettyDate(date: Date, amPM: "AM" | "PM"): string {
-  return (
-    date.getMonth() +
-    1 +
-    "/" +
-    date.getDate() +
-    "/" +
-    date.getFullYear() +
-    " " +
-    amPM
-  );
-}
-
 function convertPrettyDateIntoDateAmPm(
-  prettyDate: string
+  prettyDate: string,
 ): { date: Date; amPM: "AM" | "PM" } {
   const dateRegex = /(\d\d?\s*\/\s*\d\d?\s*\/\s*\d\d\d\d)\s+(AM|PM)/;
   const match = prettyDate.match(dateRegex);
@@ -359,7 +293,7 @@ function convertPrettyDateIntoDateAmPm(
 let LOG_COUNT = 1;
 function addLogToLogSheet(obj: any, note?: string) {
   const LOG_SHEET = SpreadsheetApp.openById(
-    "1gQNMd06hj6Lsh1OPWKC1L0wgc12aqiNroR97XV-D2cI"
+    "1gQNMd06hj6Lsh1OPWKC1L0wgc12aqiNroR97XV-D2cI",
   ).getSheetByName("Logs");
   const THIS_LOG_NO = LOG_COUNT++;
   LOG_SHEET.getRange(THIS_LOG_NO, 1).setValue(JSON.stringify(obj, null, 4));

@@ -1,3 +1,5 @@
+const FORM_URL =
+  "https://docs.google.com/forms/d/1u5j2cCf6NkWKq5Np0Ylmv5UkHbtCbEkuFli9nobpox0/edit";
 // https://tc39.github.io/ecma262/#sec-array.prototype.find
 if (!Array.prototype.find) {
   Object.defineProperty(Array.prototype, "find", {
@@ -367,4 +369,68 @@ function getFeedingLogItem(
     status,
     foods,
   };
+}
+
+type FeedingLogItem = {
+  timestamp: number;
+  date: Date;
+  amPM: "AM" | "PM";
+  catName: string;
+  status: string;
+  foods: { name: string; status: string }[];
+};
+
+function setupRecordingFormMacro() {
+  const form = FormApp.openByUrl(FORM_URL);
+  const sheet: GoogleAppsScript.Spreadsheet.Sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
+    "Feeding Logs",
+  );
+
+  form.deleteAllResponses();
+  form.getItems().forEach(item => form.deleteItem(item));
+  form.setTitle("Food Recording Form");
+
+  const feedingData = getAllFeedingsWithQuestionMarks(sheet);
+  const byPrettyDate = feedingData.reduce(
+    (byPrettyDate, item) => {
+      const prettyDate = convertDateAmPmIntoPrettyDate(item.date, item.amPM);
+      return {
+        ...byPrettyDate,
+        [prettyDate]: [...(byPrettyDate[prettyDate] || []), item],
+      };
+    },
+    {} as { [prettyDate: string]: FeedingLogItem[] },
+  );
+
+  Object.keys(byPrettyDate).forEach(prettyDate => {
+    form
+      .addGridItem()
+      .setTitle(`${prettyDate} Feeding`)
+      .setRows(
+        byPrettyDate[prettyDate].reduce(
+          (all, item) => {
+            return [...all, ...item.foods.map(({ name }) => `${item.catName} - ${name}`)];
+          },
+          [] as string[],
+        ),
+      )
+      .setColumns(["Yes", "Half", "No"])
+      .setRequired(true);
+  });
+}
+
+function getAllFeedingsWithQuestionMarks(sheet: GoogleAppsScript.Spreadsheet.Sheet) {
+  return sheet
+    .getRange("E3:E")
+    .getValues()
+    .map((row, i) => ({ i, value: row[0] }))
+    .filter(({ value }) => value === "?")
+    .map(({ i }) => i + 3)
+    .map(i => getFeedingLogItem(sheet, i));
+}
+
+function convertDateAmPmIntoPrettyDate(date: Date, amPM: "AM" | "PM"): string {
+  return (
+    date.getMonth() + 1 + "/" + date.getDate() + "/" + date.getFullYear() + " " + amPM
+  );
 }
