@@ -386,7 +386,8 @@ function setupRecordingForm() {
   let form: GoogleAppsScript.Forms.Form;
   if (FORM_URL === "") {
     form = FormApp.create("Food Recording Form");
-    config.getRange("A1").setValue(form.getPublishedUrl());
+    config.getRange("A1").setValue(form.getEditUrl());
+    config.getRange("A2").setValue(form.getPublishedUrl());
   } else {
     form = FormApp.openByUrl(FORM_URL);
   }
