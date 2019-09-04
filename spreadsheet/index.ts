@@ -117,8 +117,6 @@ function copyFeedingDataMacro() {
       .getRange(3, 1, 1, data.length)
       .setValues([data]);
   });
-
-  setupRecordingFormMacro();
 }
 
 ///////////////////////////////////////////////////
