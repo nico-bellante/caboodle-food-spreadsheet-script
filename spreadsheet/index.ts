@@ -41,14 +41,14 @@ if (!Array.prototype.find) {
       return undefined;
     },
     configurable: true,
-    writable: true
+    writable: true,
   });
 }
 
 const SHEET_NAMES = {
   BoardingSchedule: "Boarding Schedule",
   AllCatsInStore: "_private_all_cats_at_store",
-  FeedingLogs: "Feeding Logs"
+  FeedingLogs: "Feeding Logs",
 };
 
 type CatSchema = {
@@ -71,30 +71,28 @@ function copyFeedingDataMacro() {
 
   // find all cats that were fed on the last feeding and have a (Y/H) for their food result
   const lastSuccessfulFeedingLogs = getAllFeedingLogs(
-    SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
-      SHEET_NAMES.FeedingLogs
-    ),
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.FeedingLogs),
     {
       date,
       amPM,
-      allowedStatusValues: ["Y", "H"]
-    }
+      allowedStatusValues: ["Y", "H"],
+    },
   );
 
   // figure out what the next feeding (this feeding)
-  date.setDate(date.getDate() + amPM === "PM" ? 1 : 0);
+  date.setDate(date.getDate() + (amPM === "PM" ? 1 : 0));
   const nextFeedingDate = date;
   const nextFeedingAMpm = amPM === "AM" ? "PM" : "AM";
 
   const timestamp = Date.now();
   const newFeedingData: RealFeedingRowData[] = catsInStore.map(cat => {
     const lastFeedingForThisCat = lastSuccessfulFeedingLogs.find(
-      log => log.catName === cat.name
+      log => log.catName === cat.name,
     );
     const suggestedFeeding = lastFeedingForThisCat
       ? lastFeedingForThisCat.foods.reduce(
           (obj, food, i) => ({ ...obj, [`food${i + 1}`]: food.name }),
-          { food1: "???" }
+          { food1: "???" },
         )
       : { food1: "???" };
 
@@ -103,11 +101,11 @@ function copyFeedingDataMacro() {
       date: getDateStringFromDate(nextFeedingDate),
       amPM: nextFeedingAMpm,
       catName: cat.name,
-      ...suggestedFeeding
+      ...suggestedFeeding,
     };
   });
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
-    SHEET_NAMES.FeedingLogs
+    SHEET_NAMES.FeedingLogs,
   );
 
   newFeedingData.map(prepareFeedingRowData).forEach(data => {
@@ -126,20 +124,18 @@ function copyFeedingDataMacro() {
 ///////////////////////////////////////////////////
 
 function getTableDataFromSheetAsArrOfObj<T extends {}>(
-  sheet: GoogleAppsScript.Spreadsheet.Sheet
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
 ): T[] {
   const [headers, ...data] = sheet.getDataRange().getValues();
-  return data.map(row =>
-    headers.reduce((o, header, i) => ({ ...o, [header]: row[i] }))
-  );
+  return data.map(row => headers.reduce((o, header, i) => ({ ...o, [header]: row[i] })));
 }
 
 function getAllCatsInStore() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
-    SHEET_NAMES.AllCatsInStore
+    SHEET_NAMES.AllCatsInStore,
   );
   return getTableDataFromSheetAsArrOfObj<CatSchema>(sheet).filter(({ name }) =>
-    Boolean(name)
+    Boolean(name),
   );
 }
 
@@ -155,7 +151,7 @@ function addLogToLogSheet(obj: any, note?: string) {
 
 function getLastFeedingDate(): { date: Date; amPM: "AM" | "PM" } {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
-    SHEET_NAMES.FeedingLogs
+    SHEET_NAMES.FeedingLogs,
   );
   const date = new Date(sheet.getRange("B3").getValue());
   const amPM: "AM" | "PM" = sheet.getRange("C3").getValue();
@@ -183,7 +179,7 @@ type FeedingLogRowOfData = {
 };
 function getRowOfFeedingLog(
   sheet: GoogleAppsScript.Spreadsheet.Sheet,
-  index: number
+  index: number,
 ): FeedingLogRowOfData {
   // addLogToLogSheet(sheet.getRange(index, 1, 1, 13).getValues()[0], "feedingrowlog");
   const [
@@ -199,7 +195,7 @@ function getRowOfFeedingLog(
     food3,
     food3Status,
     food4,
-    food4Status
+    food4Status,
   ] = sheet.getRange(index, 1, 1, 13).getValues()[0];
 
   const status = sheet.getRange(index, 5).getFormula();
@@ -216,7 +212,7 @@ function getRowOfFeedingLog(
     food3,
     food3Status,
     food4,
-    food4Status
+    food4Status,
   };
 }
 
@@ -236,8 +232,8 @@ function writeFeedingLogRowOfData(
     food3,
     food3Status,
     food4,
-    food4Status
-  }: FeedingLogRowOfData
+    food4Status,
+  }: FeedingLogRowOfData,
 ): void {
   sheet
     .getRange(index, 1, 1, 13)
@@ -255,8 +251,8 @@ function writeFeedingLogRowOfData(
         food3,
         food3Status,
         food4,
-        food4Status
-      ]
+        food4Status,
+      ],
     ]);
 }
 
@@ -286,7 +282,7 @@ function prepareFeedingRowData(data: RealFeedingRowData) {
     data.food3 || "--",
     getQuestionMarkOrDash(data.food3),
     data.food4 || "--",
-    getQuestionMarkOrDash(data.food4)
+    getQuestionMarkOrDash(data.food4),
   ];
 }
 
@@ -296,7 +292,7 @@ function getAllFeedingLogs(
     date: Date;
     amPM: "AM" | "PM";
     allowedStatusValues: Array<"Y" | "H" | "N" | "?" | "">;
-  }
+  },
 ): {
   timestamp: number;
   date: Date;
@@ -316,7 +312,7 @@ function getAllFeedingLogs(
         amPM &&
         getDateStringFromDate(date) === dateStringFilter &&
         amPM === filter.amPM &&
-        filter.allowedStatusValues.indexOf(overallStatus) >= 0
+        filter.allowedStatusValues.indexOf(overallStatus) >= 0,
     )
     .map(({ i }) => i + 3)
     .map(index => getFeedingLogItem(sheet, index));
@@ -324,7 +320,7 @@ function getAllFeedingLogs(
 
 function getFeedingLogItem(
   sheet: GoogleAppsScript.Spreadsheet.Sheet,
-  index: number
+  index: number,
 ): {
   timestamp: number;
   date: Date;
@@ -346,7 +342,7 @@ function getFeedingLogItem(
     food3,
     food3Status,
     food4,
-    food4Status
+    food4Status,
   } = getRowOfFeedingLog(sheet, index);
   const foods = [];
 
@@ -369,6 +365,6 @@ function getFeedingLogItem(
     amPM,
     catName,
     status,
-    foods
+    foods,
   };
 }
