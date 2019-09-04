@@ -377,12 +377,13 @@ function getFeedingLogItem(
 //////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////
-const FORM_URL = "";
+
 function setupRecordingForm() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const config = spreadsheet.getSheetByName("_config");
+  const FORM_URL = config.getRange("A1").getValue();
+  const sheet = spreadsheet.getSheetByName("Feeding Logs");
   const form = FormApp.openByUrl(FORM_URL);
-  let sheet: GoogleAppsScript.Spreadsheet.Sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
-    "Feeding Logs",
-  );
 
   form.deleteAllResponses();
   form.getItems().forEach(item => form.deleteItem(item));
