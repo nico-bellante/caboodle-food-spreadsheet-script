@@ -80,7 +80,7 @@ function copyFeedingDataMacro() {
   );
 
   // figure out what the next feeding (this feeding)
-  date.setDate(date.getDate() + amPM === "PM" ? 1 : 0);
+  date.setDate(date.getDate() + (amPM === "PM" ? 1 : 0));
   const nextFeedingDate = date;
   const nextFeedingAMpm = amPM === "AM" ? "PM" : "AM";
 
