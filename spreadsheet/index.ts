@@ -118,10 +118,7 @@ function copyFeedingDataMacro() {
       .setValues([data]);
   });
 
-  // for cat in the list of cats that are currently in the caboodle
-  //    check if cat is in previousYes list
-  //      if so, copy what they ate last time into the new feeding data
-  // write new feeding data to the beginning of sheet
+  setupRecordingFormMacro();
 }
 
 ///////////////////////////////////////////////////
