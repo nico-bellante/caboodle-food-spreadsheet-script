@@ -318,17 +318,19 @@ function getAllFeedingLogs(
     .map(index => getFeedingLogItem(sheet, index));
 }
 
-function getFeedingLogItem(
-  sheet: GoogleAppsScript.Spreadsheet.Sheet,
-  index: number,
-): {
+type FeedingLogItem = {
   timestamp: number;
   date: Date;
   amPM: "AM" | "PM";
   catName: string;
   status: string;
   foods: { name: string; status: string }[];
-} {
+};
+
+function getFeedingLogItem(
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
+  index: number,
+): FeedingLogItem {
   const {
     timestamp,
     date,
@@ -367,4 +369,78 @@ function getFeedingLogItem(
     status,
     foods,
   };
+}
+
+//////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+//////////////////////// -=-FORM STUFF-=- ////////////////////////////
+//////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+const FORM_URL = "";
+function setupRecordingForm() {
+  const form = FormApp.openByUrl(FORM_URL);
+  let sheet: GoogleAppsScript.Spreadsheet.Sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
+    "Feeding Logs",
+  );
+
+  form.deleteAllResponses();
+  form.getItems().forEach(item => form.deleteItem(item));
+  form.setTitle("Food Recording Form");
+
+  const feedingData = getAllFeedingsWithQuestionMarks(sheet);
+  const byPrettyDate = feedingData.reduce(
+    (byPrettyDate, item) => {
+      const prettyDate = convertDateAmPmIntoPrettyDate(item.date, item.amPM);
+      return {
+        ...byPrettyDate,
+        [prettyDate]: [...(byPrettyDate[prettyDate] || []), item],
+      };
+    },
+    {} as { [prettyDate: string]: FeedingLogItem[] },
+  );
+
+  Object.keys(byPrettyDate).forEach(prettyDate => {
+    form
+      .addGridItem()
+      .setTitle(`${prettyDate} Feeding`)
+      .setRows(
+        byPrettyDate[prettyDate].reduce(
+          (all, item) => {
+            return [...all, ...item.foods.map(({ name }) => `${item.catName} - ${name}`)];
+          },
+          [] as string[],
+        ),
+      )
+      .setColumns(["Yes", "Half", "No"])
+      .setRequired(true);
+  });
+}
+
+//////////////////////////////////////////////////////
+
+function getAllFeedingsWithQuestionMarks(sheet: GoogleAppsScript.Spreadsheet.Sheet) {
+  return sheet
+    .getRange("E3:E")
+    .getValues()
+    .map((row, i) => ({ i, value: row[0] }))
+    .filter(({ value }) => value === "?")
+    .map(({ i }) => i + 3)
+    .map(i => getFeedingLogItem(sheet, i));
+}
+
+function convertDateAmPmIntoPrettyDate(date: Date, amPM: "AM" | "PM"): string {
+  return (
+    date.getMonth() + 1 + "/" + date.getDate() + "/" + date.getFullYear() + " " + amPM
+  );
+}
+
+function convertPrettyDateIntoDateAmPm(
+  prettyDate: string,
+): { date: Date; amPM: "AM" | "PM" } {
+  const dateRegex = /(\d\d?\s*\/\s*\d\d?\s*\/\s*\d\d\d\d)\s+(AM|PM)/;
+  const match = prettyDate.match(dateRegex);
+  const date = new Date(match![1]);
+  const amPM = match![2] as "AM" | "PM";
+  return { date, amPM };
 }
